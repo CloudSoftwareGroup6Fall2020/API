@@ -64,8 +64,29 @@ class GetImageCount(Resource):
             abort(404, message="404 cat not found")
         return a
 
+class GetAllImages(Resource):
+    @marshal_with(resource_fields)
+    def get(self):
+        resultproxy = engine.execute(f"SELECT * FROM Images where id != 0 ORDER BY id ASC")
+        d, a = {}, []
+        for rowproxy in resultproxy:
+            # rowproxy.items() returns an array like [(key0, value0), (key1, value1)]
+            for column, value in rowproxy.items():
+                # build up the dictionary
+                temp = str(value).split()
+                if (column == 'upload_date'):
+                    value = temp[0] + ' ' + temp[1]
+                else:
+                    value = temp[0]
+                d = {**d, **{column: value}}
+            a.append(d)
+        if not a:
+            abort(404, message="404 cat not found")
+        return a
+
 api.add_resource(Image, "/images/<int:img_id>")
 api.add_resource(GetImageCount, "/images/count")
+api.add_resource(GetAllImages, "/images/")
 
 if (__name__) == "__main__":
     app.run(debug=False)
