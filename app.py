@@ -51,7 +51,21 @@ class Image(Resource):
             abort(404, message="404 cat not found")
         return a
 
+class GetImageCount(Resource):
+    def get(self):
+        resultproxy = engine.execute(f"select COUNT(id) from Images where id != 0")
+        d, a = {}, []
+        for rowproxy in resultproxy:
+            # rowproxy.items() returns an array like [(key0, value0), (key1, value1)]
+            # build up the dictionary
+            d = {**d, **{"count": rowproxy[0]}}
+            a.append(d)
+        if not a:
+            abort(404, message="404 cat not found")
+        return a
+
 api.add_resource(Image, "/images/<int:img_id>")
+api.add_resource(GetImageCount, "/images/count")
 
 if (__name__) == "__main__":
     app.run(debug=False)
