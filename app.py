@@ -1,5 +1,4 @@
 from flask import Flask
-from flask.json import jsonify
 from flask_restful import Api, Resource, abort, fields, marshal_with
 from flask_sqlalchemy import SQLAlchemy
 from azure.storage.blob import BlobServiceClient
