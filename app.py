@@ -1,7 +1,8 @@
 from flask import Flask
 from flask_restful import Api, Resource, abort, fields, marshal_with
 from flask_sqlalchemy import SQLAlchemy
-import os
+from azure.storage.blob import BlobServiceClient
+import os, datetime
 
 server = 'group6project.database.windows.net'
 database = 'cloudprojectdb'
@@ -30,6 +31,44 @@ resource_fields = {
     'upload_date': fields.String,
     'path': fields.String
 }
+
+class UploadImage(Resource):
+    connection_string_blob = 'DefaultEndpointsProtocol=https;AccountName=cs71003bffda805345c;AccountKey=KdCm90f50B+/59bmb7F8A97ATIxbfMhHlz41BN4jpTR9bQKT5Bjp9yfPeZKYXDG613JQPoQHoe1lesbFjoADCA==;EndpointSuffix=core.windows.net'
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string_blob)
+    container_name = 'blobcontainer8b009926-54c3-4286-858b-daabadfe43f3'
+    
+    @marshal_with(resource_fields)
+    def post(self, path):
+        upload_file_path = path
+        temp = upload_file_path.split('\\')
+        img_name = temp[len(temp) - 1]
+        img_type = img_name.split('.')[1]
+        img_name = img_name.split('.')[0]
+        img_path = 'https://cs71003bffda805345c.blob.core.windows.net/' + self.container_name + '/' + img_name
+
+        blob_client = self.blob_service_client.get_blob_client(container=self.container_name, blob=img_name+'.'+img_type)
+        print(f"\nUploading {img_name}.{img_type}...")
+
+        try:
+            # Upload the created file
+            with open(upload_file_path, "rb") as data:
+                blob_client.upload_blob(data)
+            print(f"{img_name}.{img_type} uploaded to storage account as blob!")
+            # Add entry to database
+            response = engine.execute('SELECT MAX(id) FROM Images')
+
+            val = 0
+            for rowproxy in response:
+                # rowproxy.items() returns an array like [(key0, value0), (key1, value1)]
+                for column, value in rowproxy.items():
+                    val = value
+            img_id = val + 1
+
+            engine.execute(f"INSERT INTO Images (id, name, img_type, upload_date, path) VALUES ('{img_id}', '{img_name}', '{img_type}', '{str(datetime.datetime.now())[0: 22]}', '{img_path}')")
+            print(f"**SUCCESS {img_name}.{img_type} added to database successfully!")
+        except Exception as ex:
+            print('Exception:')
+            print(ex)
 
 class Image(Resource):
     @marshal_with(resource_fields)
@@ -108,6 +147,7 @@ api.add_resource(Image, "/images/<int:img_id>")
 api.add_resource(GetImageByName, "/images/<string:img_name>")
 api.add_resource(GetImageCount, "/images/count")
 api.add_resource(GetAllImages, "/images/")
+api.add_resource(UploadImage, "/images/upload/<string:path>")
 
 if (__name__) == "__main__":
     app.run(debug=False)
