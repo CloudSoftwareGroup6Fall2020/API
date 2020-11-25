@@ -1,8 +1,8 @@
 from flask import Flask
-from flask_restful import Api, Resource, abort, fields, marshal_with
+from flask_restful import Api, Resource, abort, fields, marshal_with, reqparse
 from flask_sqlalchemy import SQLAlchemy
 from azure.storage.blob import BlobServiceClient
-import os, datetime
+import os, datetime, sys, base64, urllib, uuid
 
 server = 'group6project.database.windows.net'
 database = 'cloudprojectdb'
@@ -17,6 +17,7 @@ try:
 except Exception as ex:
     print('Database connection FAILED!:')
     print(ex)
+    sys.exit()
 
 app = Flask(__name__)
 api = Api(app)
@@ -37,23 +38,29 @@ class UploadImage(Resource):
     blob_service_client = BlobServiceClient.from_connection_string(connection_string_blob)
     container_name = 'blobcontainer8b009926-54c3-4286-858b-daabadfe43f3'
     
-    @marshal_with(resource_fields)
-    def post(self, path):
-        upload_file_path = path
-        temp = upload_file_path.split('\\')
-        img_name = temp[len(temp) - 1]
-        img_type = img_name.split('.')[1]
-        img_name = img_name.split('.')[0]
-        img_path = 'https://cs71003bffda805345c.blob.core.windows.net/' + self.container_name + '/' + img_name
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument('img_base64_message')
+        args = parser.parse_args()
+        base64_message = args['img_base64_message']
+        base64_img_bytes = base64_message.encode('utf-8')
 
-        blob_client = self.blob_service_client.get_blob_client(container=self.container_name, blob=img_name+'.'+img_type)
-        print(f"\nUploading {img_name}.{img_type}...")
+        with open('decoded_image.png', 'wb') as file_to_save:
+            decoded_image_data = base64.decodebytes(base64_img_bytes)
+            file_to_save.write(decoded_image_data)
+
+        img_name = str(uuid.uuid4())
+        img_type = '.png'
+        img_path = 'https://cs71003bffda805345c.blob.core.windows.net/' + self.container_name + '/' + img_name + img_type
+
+        blob_client = self.blob_service_client.get_blob_client(container=self.container_name, blob=img_name+img_type)
+        print(f"\nUploading {img_name}{img_type}...")
 
         try:
             # Upload the created file
-            with open(upload_file_path, "rb") as data:
+            with open('decoded_image.png', "rb") as data:
                 blob_client.upload_blob(data)
-            print(f"{img_name}.{img_type} uploaded to storage account as blob!")
+            print(f"{img_name}{img_type} uploaded to storage account as blob!")
             # Add entry to database
             response = engine.execute('SELECT MAX(id) FROM Images')
 
@@ -65,10 +72,11 @@ class UploadImage(Resource):
             img_id = val + 1
 
             engine.execute(f"INSERT INTO Images (id, name, img_type, upload_date, path) VALUES ('{img_id}', '{img_name}', '{img_type}', '{str(datetime.datetime.now())[0: 22]}', '{img_path}')")
-            print(f"**SUCCESS {img_name}.{img_type} added to database successfully!")
+            print(f"**SUCCESS {img_name}{img_type} added to database successfully!")
         except Exception as ex:
-            print('Exception:')
+            print('Blob upload failed!')
             print(ex)
+            sys.exit()
 
 class Image(Resource):
     @marshal_with(resource_fields)
@@ -147,7 +155,7 @@ api.add_resource(Image, "/images/<int:img_id>")
 api.add_resource(GetImageByName, "/images/<string:img_name>")
 api.add_resource(GetImageCount, "/images/count")
 api.add_resource(GetAllImages, "/images/")
-api.add_resource(UploadImage, "/images/upload/<string:path>")
+api.add_resource(UploadImage, "/images/upload/")
 
 if (__name__) == "__main__":
     app.run(debug=False)
