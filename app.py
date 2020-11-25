@@ -22,7 +22,7 @@ except Exception as ex:
 app = Flask(__name__)
 api = Api(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = server
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False    #No idea what this does, but it's set to false to suppress deprecation warning.
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 resource_fields = {
@@ -37,6 +37,7 @@ class UploadImage(Resource):
     connection_string_blob = 'DefaultEndpointsProtocol=https;AccountName=cs71003bffda805345c;AccountKey=KdCm90f50B+/59bmb7F8A97ATIxbfMhHlz41BN4jpTR9bQKT5Bjp9yfPeZKYXDG613JQPoQHoe1lesbFjoADCA==;EndpointSuffix=core.windows.net'
     blob_service_client = BlobServiceClient.from_connection_string(connection_string_blob)
     container_name = 'blobcontainer8b009926-54c3-4286-858b-daabadfe43f3'
+
     
     def post(self):
         parser = reqparse.RequestParser()
@@ -48,7 +49,6 @@ class UploadImage(Resource):
         with open('decoded_image.png', 'wb') as file_to_save:
             decoded_image_data = base64.decodebytes(base64_img_bytes)
             file_to_save.write(decoded_image_data)
-
         img_name = str(uuid.uuid4())
         img_type = '.png'
         img_path = 'https://cs71003bffda805345c.blob.core.windows.net/' + self.container_name + '/' + img_name + img_type
@@ -61,6 +61,12 @@ class UploadImage(Resource):
             with open('decoded_image.png', "rb") as data:
                 blob_client.upload_blob(data)
             print(f"{img_name}{img_type} uploaded to storage account as blob!")
+        except Exception as ex:
+            print('Blob upload failed!')
+            print(ex)
+            abort(400)
+        
+        try:
             # Add entry to database
             response = engine.execute('SELECT MAX(id) FROM Images')
 
@@ -74,9 +80,11 @@ class UploadImage(Resource):
             engine.execute(f"INSERT INTO Images (id, name, img_type, upload_date, path) VALUES ('{img_id}', '{img_name}', '{img_type}', '{str(datetime.datetime.now())[0: 22]}', '{img_path}')")
             print(f"**SUCCESS {img_name}{img_type} added to database successfully!")
         except Exception as ex:
-            print('Blob upload failed!')
+            print('Database entry failed!')
             print(ex)
-            sys.exit()
+            blob_client.delete_blob(blob=img_name)
+            abort(400)
+        os.remove('decoded_image.png')
 
 class Image(Resource):
     @marshal_with(resource_fields)
@@ -158,4 +166,4 @@ api.add_resource(GetAllImages, "/images/")
 api.add_resource(UploadImage, "/images/upload/")
 
 if (__name__) == "__main__":
-    app.run(debug=False)
+    app.run('127.0.0.2', port='5000')
