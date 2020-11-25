@@ -166,4 +166,4 @@ api.add_resource(GetAllImages, "/images/")
 api.add_resource(UploadImage, "/images/upload/")
 
 if (__name__) == "__main__":
-    app.run('127.0.0.2', port='5000')
+    app.run(debug=False)
