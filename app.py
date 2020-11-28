@@ -1,3 +1,4 @@
+from flasgger.base import Swagger
 from flask import Flask
 from flask_restful import Api, Resource, abort, fields, marshal_with, reqparse
 from flask_sqlalchemy import SQLAlchemy
@@ -23,7 +24,24 @@ app = Flask(__name__)
 api = Api(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = server
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SWAGGER'] = {'title': 'Cloud Software Project API Specifications', 'uiversion': 2}
 db = SQLAlchemy(app)
+
+swagger_config = {
+    'headers': [],
+    'specs': [
+        {
+            'endpoint': 'api',
+            'route': '/api/',
+            'rule_filter': lambda rule: True,
+            'model_filter': lambda tag: True,
+        }
+    ],
+    'static_url_path': '/flasgger_static',
+    'swagger_ui': True,
+    'specs_route': '/swagger/',
+}
+swagger = Swagger(app, swagger_config)
 
 resource_fields = {
     'id': fields.Integer,
@@ -40,6 +58,23 @@ class UploadImage(Resource):
 
     
     def post(self):
+        """
+       Upload an image as a blob
+       Uploads an image as a blob to azure storage and adds its data to the Images table in the database.
+       ---
+       consumes:
+        - application/json
+       parameters:
+         - in: path
+           name: img_data
+           type: string
+           required: true
+       responses:
+         200:
+           description: Image Uploaded Successfully.
+         400:
+           description: Image Upload Failed.
+        """
         parser = reqparse.RequestParser()
         parser.add_argument('img_base64_message')
         args = parser.parse_args()
@@ -86,9 +121,26 @@ class UploadImage(Resource):
             abort(400)
         os.remove('decoded_image.png')
 
-class Image(Resource):
+class GetImageByID(Resource):
     @marshal_with(resource_fields)
     def get(self, img_id):
+        """
+       Get image by ID
+       Retrieves image data for specified ID. Response is in JSON format.
+       ---
+       produces:
+        - application/json
+       parameters:
+         - in: path
+           name: img_id
+           type: string
+           required: true
+       responses:
+         200:
+           description: Image found with img_id
+         404:
+           description: Image not found
+        """
         resultproxy = engine.execute(f"select * from Images where id = {img_id}")
         d, a = {}, []
         for rowproxy in resultproxy:
@@ -109,6 +161,23 @@ class Image(Resource):
 class GetImageByName(Resource):
     @marshal_with(resource_fields)
     def get(self, img_name):
+        """
+       Get image by name
+       Retrieves image data for specified filename. Response is in JSON format.
+       ---
+       produces:
+        - application/json
+       parameters:
+         - in: path
+           name: img_name
+           type: string
+           required: true
+       responses:
+         200:
+           description: Image found with img_name
+         404:
+           description: 404 cat not found
+        """
         resultproxy = engine.execute(f"select * from Images where name = '{img_name}'")
         d, a = {}, []
         for rowproxy in resultproxy:
@@ -128,6 +197,18 @@ class GetImageByName(Resource):
 
 class GetImageCount(Resource):
     def get(self):
+        """
+       Get image count
+       Retrieves the total number of images in the Images table. Response is in JSON format.
+       ---
+       produces:
+        - application/json
+       responses:
+         200:
+           description: returned image count
+         404:
+           description: Images table is empty
+        """
         resultproxy = engine.execute(f"select COUNT(id) from Images where id != 0")
         d, a = {}, []
         for rowproxy in resultproxy:
@@ -142,6 +223,18 @@ class GetImageCount(Resource):
 class GetAllImages(Resource):
     @marshal_with(resource_fields)
     def get(self):
+        """
+       Get all images
+       Retrieves all image data in the Images table. Response is in JSON format.
+       ---
+       produces:
+        - application/json
+       responses:
+         200:
+           description: returned all images
+         404:
+           description: images table is empty
+        """
         resultproxy = engine.execute(f"SELECT * FROM Images where id != 0 ORDER BY id ASC")
         d, a = {}, []
         for rowproxy in resultproxy:
@@ -159,11 +252,11 @@ class GetAllImages(Resource):
             abort(404, message="404 cat not found")
         return a
 
-api.add_resource(Image, "/images/<int:img_id>")
-api.add_resource(GetImageByName, "/images/<string:img_name>")
-api.add_resource(GetImageCount, "/images/count")
-api.add_resource(GetAllImages, "/images/")
-api.add_resource(UploadImage, "/images/upload/")
+api.add_resource(GetImageByID, "/api/images/<int:img_id>")
+api.add_resource(GetImageByName, "/api/images/<string:img_name>")
+api.add_resource(GetImageCount, "/api/images/count")
+api.add_resource(GetAllImages, "/api/images/")
+api.add_resource(UploadImage, "/api/images/upload/")
 
 if (__name__) == "__main__":
     app.run(debug=False)
